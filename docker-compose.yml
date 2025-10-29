@@ -18,7 +18,10 @@ services:
       - postgres
     volumes:
       - ./public:/var/www/html/public
-      - ./app:/var/www/html/app
+      - ./src:/var/www/html/src
+      - ./vendor:/var/www/html/vendor
+      - ./composer.json:/var/www/html/composer.json
+      - ./composer.lock:/var/www/html/composer.lock
     networks:
       - spectracle-network
     restart: unless-stopped
