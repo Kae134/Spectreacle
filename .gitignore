@@ -1,0 +1,39 @@
+# IA
+Agent.md
+CLAUDE.md
+
+# Composer
+/vendor/
+composer.lock
+
+# Environnements
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+*.err
+*.out
+
+# Cache et sessions
+/cache/
+tmp/
+sessions/
+*.cache
+*.tmp
+
+# IDE et éditeurs
+/.idea/
+/.vscode/
+/nbproject/
+/*.sublime-*
+/*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Tests et coverage
+coverage/
+.phpunit.result.cache
