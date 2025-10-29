@@ -1,4 +1,4 @@
-# Spectreacle
+# App
 
 ## Equipe
 

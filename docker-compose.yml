@@ -3,19 +3,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ${CONTAINER_APP}
+    container_name: spectracle_app
     environment:
-      - APP_NAME=${APP_NAME}
-      - APP_ENV=${APP_ENV}
-      - APP_DEBUG=${APP_DEBUG}
-      - DB_CONNECTION=${DB_CONNECTION}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_DATABASE=${DB_DATABASE}
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
+      APP_NAME: Spectreacle
+      APP_ENV: dev
+      APP_DEBUG: 'true'
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: spectreacle
+      DB_USERNAME: root
+      DB_PASSWORD: root
     depends_on:
-      - postgres
+      - mysql
     volumes:
       - ./public:/var/www/html/public
       - ./app:/var/www/html/app
@@ -31,10 +31,9 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: ${CONTAINER_NGINX}
+    container_name: spectracle_nginx
     ports:
-      - "${HTTP_PORT}:80"
-      - "${HTTPS_PORT}:443"
+      - "8080:80"
     volumes:
       - ./public:/var/www/html/public:ro
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
@@ -44,39 +43,33 @@ services:
     networks:
       - spectracle-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: ${CONTAINER_POSTGRES}
+  mysql:
+    image: mysql:8.0
+    container_name: spectracle_mysql
     environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      MYSQL_ROOT_PASSWORD: root       
+      MYSQL_DATABASE: spectreacle    
+      
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/migrations:/docker-entrypoint-initdb.d/migrations
+      - ./database/seeders:/docker-entrypoint-initdb.d/seeders
     networks:
       - spectracle-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$MYSQL_ROOT_PASSWORD"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
 
-
 volumes:
-  postgres_data:
-    name: ${VOLUME_POSTGRES}
+  mysql_data:
 
 networks:
   spectracle-network:
-    name: ${NETWORK_NAME}
     driver: bridge

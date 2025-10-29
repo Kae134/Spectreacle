@@ -37,3 +37,16 @@ Thumbs.db
 # Tests et coverage
 coverage/
 .phpunit.result.cache
+
+
+/vendor/
+/var/logs/*.log
+/var/cache/*
+.env
+.DS_Store
+composer.lock
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
