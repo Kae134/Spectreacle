@@ -1,4 +1,8 @@
 # Spectreacle
+Pour lancer
+```
+docker compose up --build
+```
 
 ## Equipe
 
