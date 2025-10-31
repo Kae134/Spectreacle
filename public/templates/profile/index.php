@@ -79,6 +79,28 @@ ob_start();
         <?php endif; ?>
     </div>
 
+    <div class="security-section">
+        <h2>Sécurité</h2>
+        <div class="security-card">
+            <h3>Authentification à deux facteurs (TOTP)</h3>
+            <div class="totp-status">
+                <?php if ($user->isTotpEnabled()): ?>
+                    <div class="totp-enabled">
+                        <span class="status-badge enabled">✅ Activée</span>
+                        <p>Votre compte est protégé par l'authentification à deux facteurs.</p>
+                        <button id="disableTotpBtn" class="btn btn-danger">Désactiver TOTP</button>
+                    </div>
+                <?php else: ?>
+                    <div class="totp-disabled">
+                        <span class="status-badge disabled">❌ Désactivée</span>
+                        <p>Améliorez la sécurité de votre compte en activant l'authentification à deux facteurs.</p>
+                        <a href="/totp-setup" class="btn btn-primary">Activer TOTP</a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
     <div class="profile-actions">
         <h2>Actions</h2>
         <div class="action-buttons">
@@ -113,6 +135,42 @@ async function cancelReservation(reservationId) {
         showMessage('Erreur lors de l\'annulation', 'error');
     }
 }
+
+// Gestion de la désactivation TOTP
+document.getElementById('disableTotpBtn')?.addEventListener('click', async function() {
+    const code = prompt('Entrez votre code TOTP à 6 chiffres pour désactiver l\'authentification à deux facteurs :');
+    
+    if (!code || code.length !== 6) {
+        alert('Code TOTP invalide');
+        return;
+    }
+    
+    if (!confirm('Êtes-vous sûr de vouloir désactiver l\'authentification à deux facteurs ?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/auth/totp/disable', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ totp_code: code })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('TOTP désactivé avec succès');
+            window.location.reload();
+        } else {
+            alert('Erreur : ' + data.error);
+        }
+    } catch (error) {
+        alert('Erreur lors de la désactivation');
+    }
+});
 </script>
 
 <?php

@@ -11,7 +11,10 @@ class User
         private string $username,
         private string $passwordHash,
         private string $email,
-        private array $roles = ['user']
+        private array $roles = ['user'],
+        private ?string $totpSecret = null,
+        private bool $totpEnabled = false,
+        private bool $requiresTwoFactor = false
     ) {}
 
     public function getId(): int
@@ -52,5 +55,38 @@ class User
     public function verifyPassword(string $password): bool
     {
         return password_verify($password, $this->passwordHash);
+    }
+
+    public function getTotpSecret(): ?string
+    {
+        return $this->totpSecret;
+    }
+
+    public function setTotpSecret(string $secret): void
+    {
+        $this->totpSecret = $secret;
+    }
+
+    public function isTotpEnabled(): bool
+    {
+        return $this->totpEnabled;
+    }
+
+    public function enableTotp(): void
+    {
+        $this->totpEnabled = true;
+        $this->requiresTwoFactor = true;
+    }
+
+    public function disableTotp(): void
+    {
+        $this->totpEnabled = false;
+        $this->totpSecret = null;
+        $this->requiresTwoFactor = false;
+    }
+
+    public function requiresTwoFactor(): bool
+    {
+        return $this->requiresTwoFactor;
     }
 }

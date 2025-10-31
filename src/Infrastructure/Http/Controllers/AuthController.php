@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Spectreacle\Infrastructure\Http\Controllers;
 
 use Spectreacle\Application\Auth\Services\AuthenticationService;
+use Spectreacle\Domain\Auth\Services\TotpService;
 use Spectreacle\Shared\Exceptions\AuthenticationException;
 use Spectreacle\Shared\Exceptions\RegistrationException;
 
 class AuthController
 {
     public function __construct(
-        private AuthenticationService $authService
+        private AuthenticationService $authService,
+        private TotpService $totpService
     ) {}
 
     public function login(): void
@@ -33,7 +35,8 @@ class AuthController
         }
 
         try {
-            $token = $this->authService->authenticate($input['username'], $input['password']);
+            $totpCode = $input['totp_code'] ?? null;
+            $token = $this->authService->authenticate($input['username'], $input['password'], $totpCode);
             
             // Créer le cookie JWT
             setcookie(
@@ -55,7 +58,14 @@ class AuthController
             ]);
         } catch (AuthenticationException $e) {
             http_response_code(401);
-            echo json_encode(['error' => $e->getMessage()]);
+            $response = ['error' => $e->getMessage()];
+            
+            // Si TOTP est requis, l'indiquer dans la réponse
+            if ($e->getMessage() === 'TOTP_REQUIRED') {
+                $response['requires_totp'] = true;
+            }
+            
+            echo json_encode($response);
         }
     }
 
@@ -119,6 +129,135 @@ class AuthController
                 'token' => $token
             ]);
         } catch (RegistrationException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function setupTotp(): void
+    {
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
+        }
+
+        $token = $_COOKIE['jwt_token'] ?? null;
+        if (!$token) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
+            return;
+        }
+
+        $user = $this->authService->getUserFromToken($token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid token']);
+            return;
+        }
+
+        try {
+            $setup = $this->authService->setupTotp($user->getId());
+            
+            echo json_encode([
+                'success' => true,
+                'secret' => $setup['secret'],
+                'qr_code_url' => $setup['qr_code_url']
+            ]);
+        } catch (AuthenticationException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function enableTotp(): void
+    {
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
+        }
+
+        $token = $_COOKIE['jwt_token'] ?? null;
+        if (!$token) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
+            return;
+        }
+
+        $user = $this->authService->getUserFromToken($token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid token']);
+            return;
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        
+        if (!isset($input['totp_code'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'TOTP code required']);
+            return;
+        }
+
+        try {
+            $result = $this->authService->enableTotp($user->getId(), $input['totp_code']);
+            echo json_encode([
+                'success' => true,
+                'message' => 'TOTP enabled successfully'
+            ]);
+        } catch (AuthenticationException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
+        } catch (\Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Internal server error']);
+        }
+    }
+
+    public function disableTotp(): void
+    {
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
+        }
+
+        $token = $_COOKIE['jwt_token'] ?? null;
+        if (!$token) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
+            return;
+        }
+
+        $user = $this->authService->getUserFromToken($token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid token']);
+            return;
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!isset($input['totp_code'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'TOTP code required']);
+            return;
+        }
+
+        try {
+            $this->authService->disableTotp($user->getId(), $input['totp_code']);
+            echo json_encode([
+                'success' => true,
+                'message' => 'TOTP disabled successfully'
+            ]);
+        } catch (AuthenticationException $e) {
             http_response_code(400);
             echo json_encode(['error' => $e->getMessage()]);
         }
