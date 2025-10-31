@@ -35,7 +35,10 @@ class FileUserRepository implements UserRepositoryInterface
                         $userData['username'],
                         $userData['passwordHash'],
                         $userData['email'],
-                        $userData['roles']
+                        $userData['roles'],
+                        $userData['totpSecret'] ?? null,
+                        $userData['totpEnabled'] ?? false,
+                        $userData['requiresTwoFactor'] ?? false
                     );
                 }
             }
@@ -55,7 +58,10 @@ class FileUserRepository implements UserRepositoryInterface
                 'username' => $user->getUsername(),
                 'passwordHash' => $user->getPasswordHash(),
                 'email' => $user->getEmail(),
-                'roles' => $user->getRoles()
+                'roles' => $user->getRoles(),
+                'totpSecret' => $user->getTotpSecret(),
+                'totpEnabled' => $user->isTotpEnabled(),
+                'requiresTwoFactor' => $user->requiresTwoFactor()
             ];
         }
         
@@ -134,5 +140,18 @@ class FileUserRepository implements UserRepositoryInterface
         $this->users[] = $user;
         $this->saveUsers();
         return $user;
+    }
+
+    public function update(User $user): User
+    {
+        foreach ($this->users as $index => $existingUser) {
+            if ($existingUser->getId() === $user->getId()) {
+                $this->users[$index] = $user;
+                $this->saveUsers();
+                return $user;
+            }
+        }
+        
+        throw new \RuntimeException('User not found for update');
     }
 }

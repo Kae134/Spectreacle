@@ -14,6 +14,11 @@ ob_start();
                 <label for="password">Mot de passe :</label>
                 <input type="password" id="password" name="password" required>
             </div>
+            <div class="form-group" id="totpGroup" style="display: none;">
+                <label for="totpCode">Code TOTP (6 chiffres) :</label>
+                <input type="text" id="totpCode" name="totpCode" maxlength="6" pattern="[0-9]{6}">
+                <small>Entrez le code généré par votre application d'authentification</small>
+            </div>
             <button type="submit" class="btn btn-primary">Se connecter</button>
         </form>
         
@@ -39,7 +44,13 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
+    const totpCode = document.getElementById('totpCode').value;
     const messageDiv = document.getElementById('loginMessage');
+    
+    const requestBody = { username, password };
+    if (totpCode) {
+        requestBody.totp_code = totpCode;
+    }
     
     try {
         const response = await fetch('/auth/login', {
@@ -47,7 +58,7 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify(requestBody)
         });
         
         const data = await response.json();
@@ -59,8 +70,16 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
                 window.location.href = '/';
             }, 1000);
         } else {
-            messageDiv.className = 'message error';
-            messageDiv.textContent = data.error;
+            if (data.requires_totp) {
+                // Afficher le champ TOTP
+                document.getElementById('totpGroup').style.display = 'block';
+                document.getElementById('totpCode').required = true;
+                messageDiv.className = 'message info';
+                messageDiv.textContent = 'Veuillez entrer votre code TOTP';
+            } else {
+                messageDiv.className = 'message error';
+                messageDiv.textContent = data.error;
+            }
         }
     } catch (error) {
         messageDiv.className = 'message error';

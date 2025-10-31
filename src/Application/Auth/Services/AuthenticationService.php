@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spectreacle\Application\Auth\Services;
 
 use Spectreacle\Domain\Auth\Services\JwtService;
+use Spectreacle\Domain\Auth\Services\TotpService;
 use Spectreacle\Domain\User\Repositories\UserRepositoryInterface;
 use Spectreacle\Shared\Exceptions\AuthenticationException;
 use Spectreacle\Shared\Exceptions\RegistrationException;
@@ -13,15 +14,27 @@ class AuthenticationService
 {
     public function __construct(
         private UserRepositoryInterface $userRepository,
-        private JwtService $jwtService
+        private JwtService $jwtService,
+        private TotpService $totpService
     ) {}
 
-    public function authenticate(string $username, string $password): string
+    public function authenticate(string $username, string $password, ?string $totpCode = null): string
     {
         $user = $this->userRepository->findByUsername($username);
         
         if (!$user || !$user->verifyPassword($password)) {
             throw new AuthenticationException('Invalid credentials');
+        }
+
+        // Si l'utilisateur a activé TOTP, vérifier le code
+        if ($user->requiresTwoFactor()) {
+            if (!$totpCode) {
+                throw new AuthenticationException('TOTP_REQUIRED');
+            }
+            
+            if (!$this->verifyTotpCode($user, $totpCode)) {
+                throw new AuthenticationException('Invalid TOTP code');
+            }
         }
 
         return $this->jwtService->generateToken($user);
@@ -93,5 +106,68 @@ class AuthenticationService
         if ($password !== $confirmPassword) {
             throw new RegistrationException('Les mots de passe ne correspondent pas');
         }
+    }
+
+    public function setupTotp(int $userId): array
+    {
+        $user = $this->userRepository->findById($userId);
+        if (!$user) {
+            throw new AuthenticationException('User not found');
+        }
+
+        $secret = $this->totpService->generateSecret();
+        $user->setTotpSecret($secret);
+        $this->userRepository->update($user);
+
+        $qrCodeUrl = $this->totpService->generateQrCodeUrl($user);
+
+        return [
+            'secret' => $secret,
+            'qr_code_url' => $qrCodeUrl
+        ];
+    }
+
+    public function enableTotp(int $userId, string $totpCode): bool
+    {
+        $user = $this->userRepository->findById($userId);
+        if (!$user || !$user->getTotpSecret()) {
+            throw new AuthenticationException('TOTP not configured');
+        }
+
+        if (!$this->verifyTotpCode($user, $totpCode)) {
+            throw new AuthenticationException('Invalid TOTP code');
+        }
+
+        $user->enableTotp();
+        $this->userRepository->update($user);
+
+        return true;
+    }
+
+    public function disableTotp(int $userId, string $totpCode): bool
+    {
+        $user = $this->userRepository->findById($userId);
+        if (!$user || !$user->isTotpEnabled()) {
+            throw new AuthenticationException('TOTP not enabled');
+        }
+
+        if (!$this->verifyTotpCode($user, $totpCode)) {
+            throw new AuthenticationException('Invalid TOTP code');
+        }
+
+        $user->disableTotp();
+        $this->userRepository->update($user);
+
+        return true;
+    }
+
+    private function verifyTotpCode(\Spectreacle\Domain\User\Entities\User $user, string $code): bool
+    {
+        $secret = $user->getTotpSecret();
+        if (!$secret) {
+            return false;
+        }
+
+        return $this->totpService->verifyCode($secret, $code);
     }
 }

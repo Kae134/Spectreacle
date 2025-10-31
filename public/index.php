@@ -17,6 +17,7 @@ use Spectreacle\Infrastructure\Database\InMemoryShowRepository;
 use Spectreacle\Infrastructure\Database\FileReservationRepository;
 use Spectreacle\Application\Auth\Services\AuthenticationService;
 use Spectreacle\Domain\Auth\Services\JwtService;
+use Spectreacle\Domain\Auth\Services\TotpService;
 
 // Configuration
 error_reporting(E_ALL);
@@ -46,10 +47,15 @@ $container->set('jwt_service', function() use ($jwtSecret) {
     return new JwtService($jwtSecret);
 });
 
+$container->set('totp_service', function() {
+    return new TotpService();
+});
+
 $container->set('auth_service', function($container) {
     return new AuthenticationService(
         $container->get('user_repository'),
-        $container->get('jwt_service')
+        $container->get('jwt_service'),
+        $container->get('totp_service')
     );
 });
 
@@ -96,11 +102,17 @@ $router = new Router($container);
 $router->get('/', HomeController::class, 'index');
 $router->get('/login', HomeController::class, 'showLoginForm');
 $router->get('/register', HomeController::class, 'showRegisterForm');
+$router->get('/totp-setup', HomeController::class, 'showTotpSetup');
 
 // Routes d'authentification
 $router->post('/auth/login', AuthController::class, 'login');
 $router->post('/auth/register', AuthController::class, 'register');
 $router->post('/auth/logout', AuthController::class, 'logout');
+
+// Routes TOTP
+$router->post('/auth/totp/setup', AuthController::class, 'setupTotp');
+$router->post('/auth/totp/enable', AuthController::class, 'enableTotp');
+$router->post('/auth/totp/disable', AuthController::class, 'disableTotp');
 
 // Routes des spectacles
 $router->get('/shows', ShowController::class, 'index');

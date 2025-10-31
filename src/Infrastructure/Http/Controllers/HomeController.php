@@ -41,6 +41,27 @@ class HomeController
         ]);
     }
 
+    public function showTotpSetup(): void
+    {
+        // Vérifier que l'utilisateur est connecté
+        $token = $_COOKIE['jwt_token'] ?? null;
+        if (!$token || !$this->authService->validateToken($token)) {
+            header('Location: /login');
+            return;
+        }
+
+        $user = $this->authService->getUserFromToken($token);
+        if (!$user) {
+            header('Location: /login');
+            return;
+        }
+
+        $this->renderHtml('totp-setup', [
+            'title' => 'Configuration TOTP - Spectreacle',
+            'user' => $user
+        ]);
+    }
+
     public function health(): void
     {
         header('Content-Type: application/json');
