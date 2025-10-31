@@ -40,7 +40,8 @@ ob_start();
                 <form id="verifyForm">
                     <div class="form-group">
                         <label for="verifyCode">Code TOTP :</label>
-                        <input type="text" id="verifyCode" name="verifyCode" maxlength="6" pattern="[0-9]{6}" required>
+                        <input type="text" id="verifyCode" name="verifyCode" maxlength="6" pattern="[0-9]{6}" required 
+                               placeholder="123456" inputmode="numeric" autocomplete="one-time-code">
                     </div>
                     <button type="submit" class="btn btn-success">Activer TOTP</button>
                     <button type="button" id="cancelSetup" class="btn btn-secondary">Annuler</button>
@@ -87,6 +88,7 @@ document.getElementById('startSetup').addEventListener('click', async function()
             
             document.getElementById('secretKey').textContent = data.secret;
             
+            
             // Ajouter un bouton pour passer à l'étape suivante
             const nextStepBtn = document.createElement('button');
             nextStepBtn.textContent = 'J\'ai scanné le QR code';
@@ -119,7 +121,7 @@ document.getElementById('copySecret').addEventListener('click', function() {
 document.getElementById('verifyForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
-    const code = document.getElementById('verifyCode').value;
+    const code = document.getElementById('verifyCode').value.trim().replace(/\s/g, '');
     const messageDiv = document.getElementById('setupMessage');
     
     try {
@@ -139,7 +141,7 @@ document.getElementById('verifyForm').addEventListener('submit', async function(
             document.getElementById('step4').style.display = 'block';
         } else {
             messageDiv.className = 'message error';
-            messageDiv.textContent = data.error;
+            messageDiv.textContent = data.error || 'Code TOTP invalide. Vérifiez que l\'heure de votre téléphone est correcte.';
         }
     } catch (error) {
         messageDiv.className = 'message error';
@@ -149,6 +151,12 @@ document.getElementById('verifyForm').addEventListener('submit', async function(
 
 document.getElementById('cancelSetup').addEventListener('click', function() {
     window.location.href = '/profile';
+});
+
+// Nettoyer l'input en temps réel
+document.getElementById('verifyCode').addEventListener('input', function(e) {
+    const value = e.target.value.replace(/[^0-9]/g, '');
+    e.target.value = value;
 });
 </script>
 

@@ -17,7 +17,9 @@ RUN mkdir -p /usr/local/etc/php-fpm.d && \
     echo 'group = www' >> /usr/local/etc/php-fpm.d/www.conf && \
     echo 'listen = 9000' >> /usr/local/etc/php-fpm.d/www.conf && \
     echo 'pm = ondemand' >> /usr/local/etc/php-fpm.d/www.conf && \
-    echo 'pm.max_children = 10' >> /usr/local/etc/php-fpm.d/www.conf
+    echo 'pm.max_children = 10' >> /usr/local/etc/php-fpm.d/www.conf && \
+    echo 'php_admin_value[error_log] = /var/log/php_errors.log' >> /usr/local/etc/php-fpm.d/www.conf && \
+    echo 'php_admin_flag[log_errors] = on' >> /usr/local/etc/php-fpm.d/www.conf
 
 USER www
 

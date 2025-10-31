@@ -168,6 +168,9 @@ class AuthenticationService
             return false;
         }
 
-        return $this->totpService->verifyCode($secret, $code);
+        // Nettoyer le code (supprimer espaces et caractères non-numériques)
+        $cleanCode = preg_replace('/[^0-9]/', '', trim($code));
+
+        return $this->totpService->verifyCode($secret, $cleanCode);
     }
 }

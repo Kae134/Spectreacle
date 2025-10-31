@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Spectreacle\Infrastructure\Http\Controllers;
 
 use Spectreacle\Application\Auth\Services\AuthenticationService;
+use Spectreacle\Domain\Auth\Services\TotpService;
 use Spectreacle\Shared\Exceptions\AuthenticationException;
 use Spectreacle\Shared\Exceptions\RegistrationException;
 
 class AuthController
 {
     public function __construct(
-        private AuthenticationService $authService
+        private AuthenticationService $authService,
+        private TotpService $totpService
     ) {}
 
     public function login(): void
@@ -158,6 +160,7 @@ class AuthController
 
         try {
             $setup = $this->authService->setupTotp($user->getId());
+            
             echo json_encode([
                 'success' => true,
                 'secret' => $setup['secret'],
@@ -194,6 +197,8 @@ class AuthController
         }
 
         $input = json_decode(file_get_contents('php://input'), true);
+        
+        
         if (!isset($input['totp_code'])) {
             http_response_code(400);
             echo json_encode(['error' => 'TOTP code required']);
@@ -201,7 +206,7 @@ class AuthController
         }
 
         try {
-            $this->authService->enableTotp($user->getId(), $input['totp_code']);
+            $result = $this->authService->enableTotp($user->getId(), $input['totp_code']);
             echo json_encode([
                 'success' => true,
                 'message' => 'TOTP enabled successfully'
@@ -209,6 +214,9 @@ class AuthController
         } catch (AuthenticationException $e) {
             http_response_code(400);
             echo json_encode(['error' => $e->getMessage()]);
+        } catch (\Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Internal server error']);
         }
     }
 

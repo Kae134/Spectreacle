@@ -8,16 +8,18 @@ use Spectreacle\Domain\User\Entities\User;
 
 class TotpService
 {
-    private const WINDOW = 1; // Fenêtre de tolérance (30 secondes avant/après)
+    private const WINDOW = 2; // Fenêtre de tolérance (60 secondes avant/après)
     private const INTERVAL = 30; // Intervalle de temps en secondes
     private const DIGITS = 6; // Nombre de chiffres du code TOTP
 
     public function generateSecret(): string
     {
+        // Base32 alphabet (RFC 4648)
         $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
         $secret = '';
         
-        for ($i = 0; $i < 32; $i++) {
+        // Générer un secret de 16 caractères (plus compatible)
+        for ($i = 0; $i < 16; $i++) {
             $secret .= $characters[random_int(0, strlen($characters) - 1)];
         }
         
@@ -31,9 +33,12 @@ class TotpService
             throw new \InvalidArgumentException('User has no TOTP secret');
         }
 
+        // Supprimer le padding pour compatibilité Google Authenticator
+        $cleanSecret = rtrim($secret, '=');
+
         $label = urlencode($issuer . ':' . $user->getUsername());
         $params = http_build_query([
-            'secret' => $secret,
+            'secret' => $cleanSecret,
             'issuer' => $issuer,
             'algorithm' => 'SHA1',
             'digits' => self::DIGITS,
@@ -45,11 +50,21 @@ class TotpService
 
     public function verifyCode(string $secret, string $code): bool
     {
+        // Nettoyer le secret (supprimer espaces, padding et convertir en majuscules)
+        $cleanSecret = strtoupper(str_replace([' ', '='], '', $secret));
+        
+        // Nettoyer le code (supprimer les espaces et caractères non-numériques)
+        $cleanCode = preg_replace('/[^0-9]/', '', $code);
+        
+        if (strlen($cleanCode) !== self::DIGITS) {
+            return false;
+        }
+        
         $timestamp = intval(time() / self::INTERVAL);
         
         // Vérifier le code dans une fenêtre de tolérance
         for ($i = -self::WINDOW; $i <= self::WINDOW; $i++) {
-            if ($this->generateCodeForTimestamp($secret, $timestamp + $i) === $code) {
+            if ($this->generateCodeForTimestamp($cleanSecret, $timestamp + $i) === $cleanCode) {
                 return true;
             }
         }
@@ -88,43 +103,36 @@ class TotpService
 
     private function base32Decode(string $secret): string
     {
-        $base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-        $base32charsFlipped = array_flip(str_split($base32chars));
+        $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        $secret = strtoupper(str_replace('=', '', $secret));
         
-        $paddingCharCount = substr_count($secret, '=');
-        $allowedValues = [6, 4, 3, 1, 0];
-        
-        if (!in_array($paddingCharCount, $allowedValues)) {
-            return '';
+        // Ajouter le padding manquant si nécessaire (pour Google Authenticator)
+        $padLength = 8 - (strlen($secret) % 8);
+        if ($padLength !== 8) {
+            $secret .= str_repeat('=', $padLength);
         }
         
-        for ($i = 0; $i < 4; $i++) {
-            if ($paddingCharCount === $allowedValues[$i] &&
-                substr($secret, -($allowedValues[$i])) !== str_repeat('=', $allowedValues[$i])) {
-                return '';
-            }
-        }
-        
-        $secret = str_replace('=', '', $secret);
-        $secret = str_split($secret);
         $binaryString = '';
+        for ($i = 0; $i < strlen($secret); $i++) {
+            $char = $secret[$i];
+            if ($char === '=') {
+                break; // Stop au padding
+            }
+            $pos = strpos($alphabet, $char);
+            if ($pos === false) {
+                throw new \InvalidArgumentException('Invalid Base32 character: ' . $char);
+            }
+            $binaryString .= str_pad(decbin($pos), 5, '0', STR_PAD_LEFT);
+        }
         
-        for ($i = 0; $i < count($secret); $i += 8) {
-            $x = '';
-            if (!in_array($secret[$i], $base32charsFlipped)) {
-                return '';
-            }
-            
-            for ($j = 0; $j < 8; $j++) {
-                $x .= str_pad(base_convert((string)@$base32charsFlipped[@$secret[$i + $j]], 10, 2), 5, '0', STR_PAD_LEFT);
-            }
-            
-            $eightBits = str_split($x, 8);
-            for ($z = 0; $z < count($eightBits); $z++) {
-                $binaryString .= (($y = chr(base_convert($eightBits[$z], 2, 10))) || ord($y) === 48) ? $y : '';
+        $result = '';
+        for ($i = 0; $i < strlen($binaryString); $i += 8) {
+            $byte = substr($binaryString, $i, 8);
+            if (strlen($byte) === 8) {
+                $result .= chr(bindec($byte));
             }
         }
         
-        return $binaryString;
+        return $result;
     }
 }

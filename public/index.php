@@ -64,7 +64,7 @@ $container->set(HomeController::class, function($container) {
 });
 
 $container->set(AuthController::class, function($container) {
-    return new AuthController($container->get('auth_service'));
+    return new AuthController($container->get('auth_service'), $container->get('totp_service'));
 });
 
 $container->set(ProtectedController::class, function($container) {
