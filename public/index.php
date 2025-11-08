@@ -18,6 +18,13 @@ use Spectreacle\Infrastructure\Database\FileReservationRepository;
 use Spectreacle\Application\Auth\Services\AuthenticationService;
 use Spectreacle\Domain\Auth\Services\JwtService;
 use Spectreacle\Domain\Auth\Services\TotpService;
+use Spectreacle\Infrastructure\Notifications\Sms\LogSmsProvider;
+use Spectreacle\Infrastructure\Notifications\Mail\LogMailProvider;
+use Spectreacle\Domain\Auth\Repositories\InMemoryOtpChallengeRepository;
+use Spectreacle\Application\Auth\Services\OtpService;
+
+use Spectreacle\Infrastructure\Notifications\Sms\TwilioSmsProvider;
+use Spectreacle\Infrastructure\Notifications\Mail\MailjetProvider;
 
 // Configuration
 error_reporting(E_ALL);
@@ -51,6 +58,33 @@ $container->set('totp_service', function() {
     return new TotpService();
 });
 
+// SMS provider
+$container->set('sms_provider', function() {
+    return new TwilioSmsProvider(
+        $_ENV['TWILIO_SID'], 
+        $_ENV['TWILIO_TOKEN'], 
+        $_ENV['TWILIO_FROM']
+    );
+});
+
+// Email provider
+$container->set('mail_provider', function() {
+    return new MailjetProvider(
+        $_ENV['MAILJET_API_KEY'],
+        $_ENV['MAILJET_API_SECRET'],
+        $_ENV['MAIL_FROM_EMAIL'],
+        $_ENV['MAIL_FROM_NAME']
+    );
+});
+
+$container->set('otp_service', function($c) {
+    return new OtpService(
+        $c->get('otp_repo'),
+        $c->get('sms_provider'),
+        $c->get('mail_provider')
+    );
+});
+
 $container->set('auth_service', function($container) {
     return new AuthenticationService(
         $container->get('user_repository'),
@@ -64,7 +98,11 @@ $container->set(HomeController::class, function($container) {
 });
 
 $container->set(AuthController::class, function($container) {
-    return new AuthController($container->get('auth_service'), $container->get('totp_service'));
+    return new AuthController(
+        $container->get('auth_service'),
+        $container->get('totp_service'),
+        $container->get('otp_service')
+    );
 });
 
 $container->set(ProtectedController::class, function($container) {
@@ -94,6 +132,26 @@ $container->set(ProfileController::class, function($container) {
     );
 });
 
+$container->set('sms_provider', function() {
+    return new LogSmsProvider(); // dev
+});
+
+$container->set('mail_provider', function() {
+    return new LogMailProvider(); // dev
+});
+
+$container->set('otp_repo', function() {
+    return new InMemoryOtpChallengeRepository(); // à remplacer plus tard par une DB
+});
+
+$container->set('otp_service', function($container) {
+    return new OtpService(
+        $container->get('otp_repo'),
+        $container->get('sms_provider'),
+        $container->get('mail_provider')
+    );
+});
+
 
 // Configuration du routeur
 $router = new Router($container);
@@ -106,8 +164,19 @@ $router->get('/totp-setup', HomeController::class, 'showTotpSetup');
 
 // Routes d'authentification
 $router->post('/auth/login', AuthController::class, 'login');
+$router->post('/auth/login/password', AuthController::class, 'loginPassword');
+$router->post('/auth/login/otp', AuthController::class, 'loginOtp');
+$router->post('/auth/login/otp/resend', AuthController::class, 'resendOtp');
 $router->post('/auth/register', AuthController::class, 'register');
 $router->post('/auth/logout', AuthController::class, 'logout');
+
+// SMS 2FA
+$router->post('/auth/2fa/sms/start', AuthController::class, 'startSms');
+$router->post('/auth/2fa/sms/verify', AuthController::class, 'verifySms');
+
+// Email 2FA
+$router->post('/auth/2fa/email/start', AuthController::class, 'startEmail');
+$router->post('/auth/2fa/email/verify', AuthController::class, 'verifyEmail');
 
 // Routes TOTP
 $router->post('/auth/totp/setup', AuthController::class, 'setupTotp');

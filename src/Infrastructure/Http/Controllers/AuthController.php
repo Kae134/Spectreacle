@@ -8,12 +8,14 @@ use Spectreacle\Application\Auth\Services\AuthenticationService;
 use Spectreacle\Domain\Auth\Services\TotpService;
 use Spectreacle\Shared\Exceptions\AuthenticationException;
 use Spectreacle\Shared\Exceptions\RegistrationException;
+use Spectreacle\Application\Auth\Services\OtpService;
 
 class AuthController
 {
     public function __construct(
         private AuthenticationService $authService,
-        private TotpService $totpService
+        private TotpService $totpService,
+        private OtpService $otpService
     ) {}
 
     public function login(): void
@@ -262,4 +264,261 @@ class AuthController
             echo json_encode(['error' => $e->getMessage()]);
         }
     }
+
+    public function loginPassword(): void
+    {
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!isset($input['username']) || !isset($input['password'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Username and password required']);
+            return;
+        }
+
+        try {
+            $result = $this->authService->beginPasswordLogin($input['username'], $input['password']);
+
+            if ($result['status'] === 'ok') {
+                $token = $result['token'];
+                setcookie('jwt_token', $token, [
+                    'expires' => time() + 900,
+                    'path' => '/',
+                    'httponly' => true
+                ]);
+
+                echo json_encode(['success' => true, 'token' => $token]);
+                return;
+            }
+
+            if ($result['status'] === 'requires_totp') {
+                http_response_code(401);
+                echo json_encode(['error' => 'TOTP_REQUIRED', 'requires_totp' => true]);
+                return;
+            }
+
+            if ($result['status'] === 'requires_otp') {
+                $challenge = $this->otpService->startLoginChallenge(
+                    $result['user_id'],
+                    $result['username'],
+                    $result['channel'],
+                    $result['phone'] ?? null,
+                    $result['email'] ?? null
+                );
+
+                http_response_code(401);
+                echo json_encode([
+                    'requires_otp' => true,
+                    'challenge_id' => $challenge['challenge_id'],
+                    'expires_at' => $challenge['expires_at'],
+                    'channel' => $challenge['channel'],
+                    'masked' => $challenge['masked']
+                ]);
+                return;
+            }
+
+        } catch (AuthenticationException $e) {
+            http_response_code(401);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function loginOtp(): void
+    {
+        header('Content-Type: application/json');
+
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        try {
+            $userId = $this->otpService->verify($input['challenge_id'], $input['code']);
+            $token = $this->authService->finalizeOtpLogin($userId);
+
+            setcookie('jwt_token', $token, [
+                'expires' => time() + 900,
+                'path' => '/',
+                'httponly' => true
+            ]);
+
+            echo json_encode(['success' => true, 'token' => $token]);
+
+        } catch (AuthenticationException $e) {
+            http_response_code(401);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function resendOtp(): void
+    {
+        header('Content-Type: application/json');
+
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        try {
+            $this->otpService->resend($input['challenge_id']);
+            echo json_encode(['success' => true]);
+        } catch (AuthenticationException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+
+    public function startSms(): void
+    {
+        header('Content-Type: application/json');
+
+        $token = $_COOKIE['jwt_token'] ?? null;
+        if (!$token) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
+            return;
+        }
+
+        $user = $this->authService->getUserFromToken($token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid token']);
+            return;
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!isset($input['phone'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Phone number required']);
+            return;
+        }
+
+        $phone = trim($input['phone']);
+
+        try {
+            // Enregistre le numéro
+            $this->authService->saveUserPhone($user->getId(), $phone);
+
+            $challenge = $this->otpService->startLoginChallenge(
+                $user->getId(),
+                $user->getUsername(),
+                'sms',
+                $phone,
+                null
+            );
+
+            echo json_encode([
+                'success' => true,
+                'challenge_id' => $challenge['challenge_id'],
+                'expires_at' => $challenge['expires_at'],
+                'masked' => $challenge['masked']
+            ]);
+        } catch (AuthenticationException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function verifySms(): void
+    {
+        header('Content-Type: application/json');
+
+        $token = $_COOKIE['jwt_token'] ?? null;
+        if (!$token) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
+            return;
+        }
+
+        $user = $this->authService->getUserFromToken($token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid token']);
+            return;
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        try {
+            $this->otpService->verify($input['challenge_id'], $input['code']);
+            $this->authService->activateSms2fa($user->getId());
+
+            echo json_encode(['success' => true]);
+        } catch (AuthenticationException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function startEmail(): void
+    {
+        header('Content-Type: application/json');
+
+        $token = $_COOKIE['jwt_token'] ?? null;
+        if (!$token) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
+            return;
+        }
+
+        $user = $this->authService->getUserFromToken($token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid token']);
+            return;
+        }
+
+        try {
+            $challenge = $this->otpService->startLoginChallenge(
+                $user->getId(),
+                $user->getUsername(),
+                'email',
+                null,
+                $user->getEmail()
+            );
+
+            echo json_encode([
+                'success' => true,
+                'challenge_id' => $challenge['challenge_id'],
+                'expires_at' => $challenge['expires_at'],
+                'masked' => $challenge['masked']
+            ]);
+        } catch (AuthenticationException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function verifyEmail(): void
+    {
+        header('Content-Type: application/json');
+
+        $token = $_COOKIE['jwt_token'] ?? null;
+        if (!$token) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
+            return;
+        }
+
+        $user = $this->authService->getUserFromToken($token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid token']);
+            return;
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        try {
+            $this->otpService->verify($input['challenge_id'], $input['code']);
+            $this->authService->activateEmail2fa($user->getId());
+
+            echo json_encode(['success' => true]);
+        } catch (AuthenticationException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
 }
+

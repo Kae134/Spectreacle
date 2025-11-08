@@ -18,6 +18,63 @@ class AuthenticationService
         private TotpService $totpService
     ) {}
 
+    public function beginPasswordLogin(string $username, string $password): array
+    {
+        $user = $this->userRepository->findByUsername($username);
+        if (!$user || !$user->verifyPassword($password)) {
+            throw new AuthenticationException('Invalid credentials');
+        }
+
+        // Si 2FA désactivé → connecte direct
+        if (!$user->requiresTwoFactor()) {
+            return [
+                'status' => 'ok',
+                'token'  => $this->jwtService->generateToken($user),
+            ];
+        }
+
+        // 2FA actif → route selon méthode
+        $method = method_exists($user, 'getTwoFactorMethod') ? $user->getTwoFactorMethod() : 'totp';
+
+        if ($method === 'totp') {
+            return ['status' => 'requires_totp'];
+        }
+
+        if ($method === 'sms') {
+            return [
+                'status'   => 'requires_otp',
+                'channel'  => 'sms',
+                'user_id'  => $user->getId(),
+                'username' => $user->getUsername(),
+                'phone'    => method_exists($user, 'getPhoneE164') ? $user->getPhoneE164() : null,
+                'email'    => $user->getEmail(),
+            ];
+        }
+
+        if ($method === 'email') {
+            return [
+                'status'   => 'requires_otp',
+                'channel'  => 'email',
+                'user_id'  => $user->getId(),
+                'username' => $user->getUsername(),
+                'phone'    => method_exists($user, 'getPhoneE164') ? $user->getPhoneE164() : null,
+                'email'    => $user->getEmail(),
+            ];
+        }
+
+        throw new AuthenticationException('Unsupported 2FA method');
+    }
+
+    public function finalizeOtpLogin(int $userId): string
+    {
+        $user = $this->userRepository->findById($userId);
+        if (!$user) {
+            throw new AuthenticationException('User not found');
+        }
+        // On pourrait ici marquer un "last_login_2fa_at"
+        return $this->jwtService->generateToken($user);
+    }
+
     public function authenticate(string $username, string $password, ?string $totpCode = null): string
     {
         $user = $this->userRepository->findByUsername($username);
@@ -172,5 +229,41 @@ class AuthenticationService
         $cleanCode = preg_replace('/[^0-9]/', '', trim($code));
 
         return $this->totpService->verifyCode($secret, $cleanCode);
+    }
+
+
+    public function saveUserPhone(int $userId, string $phone): void
+    {
+        $user = $this->userRepository->findById($userId);
+        if (!$user) {
+            throw new AuthenticationException("User not found");
+        }
+
+        // Ajouter dans User ton setter
+        $user->setPhoneE164($phone);
+
+        $this->userRepository->update($user);
+    }
+
+    public function activateSms2fa(int $userId): void
+    {
+        $user = $this->userRepository->findById($userId);
+        if (!$user) throw new AuthenticationException("User not found");
+
+        $user->setTwoFactorMethod("sms");
+        $user->enableTotp(); // active 2FA de manière générique
+
+        $this->userRepository->update($user);
+    }
+
+    public function activateEmail2fa(int $userId): void
+    {
+        $user = $this->userRepository->findById($userId);
+        if (!$user) throw new AuthenticationException("User not found");
+
+        $user->setTwoFactorMethod("email");
+        $user->enableTotp();
+
+        $this->userRepository->update($user);
     }
 }

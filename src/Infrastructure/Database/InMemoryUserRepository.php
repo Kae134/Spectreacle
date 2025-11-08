@@ -9,59 +9,37 @@ use Spectreacle\Domain\User\Repositories\UserRepositoryInterface;
 
 class InMemoryUserRepository implements UserRepositoryInterface
 {
+    /** @var array<int,User> */
     private array $users = [];
-    private int $nextId = 1;
+
+    private int $autoIncrement = 1;
 
     public function __construct()
     {
-        // Ajouter quelques utilisateurs de test
-        $this->users[] = new User(
-            $this->nextId++,
-            'admin',
-            password_hash('admin123', PASSWORD_DEFAULT),
-            'admin@spectreacle.com',
-            ['admin', 'user']
-        );
-        
-        $this->users[] = new User(
-            $this->nextId++,
-            'user1',
-            password_hash('password123', PASSWORD_DEFAULT),
-            'user1@spectreacle.com',
-            ['user']
-        );
+        // Tu peux prévoir quelques utilisateurs ici si tu veux
+        // Exemple :
+        // $this->create("admin", "admin@example.com", "admin123");
     }
 
     public function findById(int $id): ?User
     {
-        foreach ($this->users as $user) {
-            if ($user->getId() === $id) {
-                return $user;
-            }
-        }
-        return null;
+        return $this->users[$id] ?? null;
     }
 
     public function findByUsername(string $username): ?User
     {
         foreach ($this->users as $user) {
-            if ($user->getUsername() === $username) {
+            if (strtolower($user->getUsername()) === strtolower($username)) {
                 return $user;
             }
         }
         return null;
     }
 
-    public function save(User $user): User
-    {
-        $this->users[] = $user;
-        return $user;
-    }
-
     public function findByEmail(string $email): ?User
     {
         foreach ($this->users as $user) {
-            if ($user->getEmail() === $email) {
+            if (strtolower($user->getEmail()) === strtolower($email)) {
                 return $user;
             }
         }
@@ -70,15 +48,38 @@ class InMemoryUserRepository implements UserRepositoryInterface
 
     public function create(string $username, string $email, string $password): User
     {
+        $id = $this->autoIncrement++;
+
         $user = new User(
-            $this->nextId++,
-            $username,
-            password_hash($password, PASSWORD_DEFAULT),
-            $email,
-            ['user'] // Les nouveaux utilisateurs sont des utilisateurs normaux
+            id: $id,
+            username: $username,
+            passwordHash: password_hash($password, PASSWORD_ARGON2ID),
+            email: $email,
+            roles: ['user'],
+            totpSecret: null,
+            totpEnabled: false,
+            requiresTwoFactor: false
         );
-        
-        $this->users[] = $user;
+
+        $this->users[$id] = $user;
+
+        return $user;
+    }
+
+    public function save(User $user): User
+    {
+        // sauvegarde naive
+        $this->users[$user->getId()] = $user;
+        return $user;
+    }
+
+    public function update(User $user): User
+    {
+        if (!isset($this->users[$user->getId()])) {
+            throw new \RuntimeException("Cannot update user, not found.");
+        }
+
+        $this->users[$user->getId()] = $user;
         return $user;
     }
 }

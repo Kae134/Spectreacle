@@ -6,108 +6,136 @@ ob_start();
 
 <div class="totp-setup-container">
     <div class="totp-setup-form">
-        <h2>Configuration de l'authentification à deux facteurs (TOTP)</h2>
+        <h2>Configuration de l'authentification à deux facteurs</h2>
         
         <div class="setup-steps">
-            <div class="step" id="step1">
-                <h3>Étape 1 : Installer une application d'authentification</h3>
-                <p>Installez une application d'authentification TOTP sur votre téléphone :</p>
-                <ul>
-                    <li><strong>Google Authenticator</strong> (iOS/Android)</li>
-                    <li><strong>Microsoft Authenticator</strong> (iOS/Android)</li>
-                    <li><strong>TOTP Authenticator</strong> (Browser extension)</li>
-                    <li><strong>Authy</strong> (iOS/Android)</li>
-                </ul>
-                <button id="startSetup" class="btn btn-primary">Commencer la configuration</button>
+
+            <!-- Choix du mode -->
+            <div class="step" id="step0">
+                <h3>Choisissez une méthode de double authentification</h3>
+                <p>Sélectionnez comment vous voulez sécuriser vos connexions :</p>
+
+                <button id="chooseTotp" class="btn btn-primary" style="margin-bottom:10px;">
+                    Activer via application TOTP (Google Authenticator)
+                </button>
+
+                <button id="chooseSms" class="btn btn-secondary" style="margin-bottom:10px;">
+                    Activer via SMS
+                </button>
+
+                <button id="chooseEmail" class="btn btn-secondary">
+                    Activer via Email
+                </button>
             </div>
-            
-            <div class="step" id="step2" style="display: none;">
+
+            <!-- TOTP (déjà existant) -->
+            <div class="step" id="step1" style="display:none;">
+                <h3>Étape 1 : Installer une application d'authentification</h3>
+                <p>Installez une application TOTP sur votre téléphone :</p>
+                <ul>
+                    <li><strong>Google Authenticator</strong></li>
+                    <li><strong>Microsoft Authenticator</strong></li>
+                    <li><strong>Authy</strong></li>
+                </ul>
+                <button id="startTotpSetup" class="btn btn-primary">Commencer la configuration TOTP</button>
+            </div>
+
+            <!-- QR code TOTP -->
+            <div class="step" id="step2" style="display:none;">
                 <h3>Étape 2 : Scanner le QR Code</h3>
                 <div id="qrCodeContainer">
-                    <p>Scannez ce QR code avec votre application d'authentification :</p>
                     <div id="qrCode"></div>
                     <div class="manual-entry">
-                        <p><strong>Ou entrez manuellement cette clé secrète :</strong></p>
+                        <p><strong>Ou saisissez la clé secret :</strong></p>
                         <code id="secretKey"></code>
                         <button id="copySecret" class="btn btn-secondary">Copier</button>
                     </div>
                 </div>
             </div>
-            
-            <div class="step" id="step3" style="display: none;">
-                <h3>Étape 3 : Vérifier le code</h3>
-                <p>Entrez le code à 6 chiffres généré par votre application :</p>
-                <form id="verifyForm">
+
+            <!-- Vérification du code TOTP -->
+            <div class="step" id="step3" style="display:none;">
+                <h3>Étape 3 : Vérifier le code TOTP</h3>
+                <form id="verifyTotpForm">
                     <div class="form-group">
-                        <label for="verifyCode">Code TOTP :</label>
-                        <input type="text" id="verifyCode" name="verifyCode" maxlength="6" pattern="[0-9]{6}" required 
-                               placeholder="123456" inputmode="numeric" autocomplete="one-time-code">
+                        <label for="verifyTotp">Code TOTP :</label>
+                        <input type="text" id="verifyTotp" maxlength="6" pattern="[0-9]{6}">
                     </div>
                     <button type="submit" class="btn btn-success">Activer TOTP</button>
-                    <button type="button" id="cancelSetup" class="btn btn-secondary">Annuler</button>
+                    <button type="button" id="cancel" class="btn btn-secondary">Annuler</button>
                 </form>
             </div>
-            
-            <div class="step" id="step4" style="display: none;">
-                <h3>✅ TOTP activé avec succès !</h3>
-                <p>L'authentification à deux facteurs est maintenant activée sur votre compte.</p>
-                <p>Vous devrez entrer un code TOTP à chaque connexion.</p>
+
+
+            <!-- SMS : Saisie du numéro -->
+            <div class="step" id="smsStep1" style="display:none;">
+                <h3>Activer la double authentification par SMS</h3>
+                <p>Entrez votre numéro de téléphone (format international).</p>
+                <form id="smsPhoneForm">
+                    <div class="form-group">
+                        <input type="text" id="smsPhone" placeholder="+33612345678" inputmode="tel" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Recevoir le code</button>
+                </form>
+            </div>
+
+            <!-- SMS : Vérification du code -->
+            <div class="step" id="smsStep2" style="display:none;">
+                <h3>Vérifier le code reçu par SMS</h3>
+                <form id="smsVerifyForm">
+                    <div class="form-group">
+                        <input type="text" id="smsOtp" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">Activer SMS</button>
+                </form>
+            </div>
+
+
+            <!-- Email : vérification du code -->
+            <div class="step" id="emailStep1" style="display:none;">
+                <h3>Activer la double authentification par Email</h3>
+                <p>Nous allons envoyer un code de confirmation à votre adresse email.</p>
+                <button id="sendEmailOtp" class="btn btn-primary">Recevoir le code</button>
+            </div>
+
+            <div class="step" id="emailStep2" style="display:none;">
+                <h3>Entrez le code reçu par Email</h3>
+                <form id="emailVerifyForm">
+                    <div class="form-group">
+                        <input type="text" id="emailOtp" maxlength="6" pattern="[0-9]{6}" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">Activer Email</button>
+                </form>
+            </div>
+
+            <!-- Final message -->
+            <div class="step" id="step4" style="display:none;">
+                <h3>✅ Authentification à deux facteurs activée !</h3>
                 <a href="/profile" class="btn btn-primary">Retour au profil</a>
             </div>
+
         </div>
-        
+
         <div id="setupMessage" class="message"></div>
     </div>
 </div>
 
 <script>
-document.getElementById('startSetup').addEventListener('click', async function() {
-    const messageDiv = document.getElementById('setupMessage');
-    
-    try {
-        const response = await fetch('/auth/totp/setup', {
-            method: 'POST',
-            credentials: 'include'
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            // Afficher le QR code
-            document.getElementById('step1').style.display = 'none';
-            document.getElementById('step2').style.display = 'block';
-            
-            // Générer le QR code
-            const qr = qrcode(0, 'M');
-            qr.addData(data.qr_code_url);
-            qr.make();
-            
-            const qrCodeElement = document.getElementById('qrCode');
-            qrCodeElement.innerHTML = qr.createImgTag(4, 8);
-            qrCodeElement.style.textAlign = 'center';
-            
-            document.getElementById('secretKey').textContent = data.secret;
-            
-            
-            // Ajouter un bouton pour passer à l'étape suivante
-            const nextStepBtn = document.createElement('button');
-            nextStepBtn.textContent = 'J\'ai scanné le QR code';
-            nextStepBtn.className = 'btn btn-primary';
-            nextStepBtn.style.marginTop = '20px';
-            nextStepBtn.addEventListener('click', function() {
-                document.getElementById('step2').style.display = 'none';
-                document.getElementById('step3').style.display = 'block';
-            });
-            document.getElementById('qrCodeContainer').appendChild(nextStepBtn);
-        } else {
-            messageDiv.className = 'message error';
-            messageDiv.textContent = data.error;
-        }
-    } catch (error) {
-        messageDiv.className = 'message error';
-        messageDiv.textContent = 'Erreur lors de la configuration';
-    }
-});
+
+document.getElementById('chooseTotp').onclick = () => {
+    document.getElementById('step0').style.display = 'none';
+    document.getElementById('step1').style.display = 'block';
+};
+
+document.getElementById('chooseSms').onclick = () => {
+    document.getElementById('step0').style.display = 'none';
+    document.getElementById('smsStep1').style.display = 'block';
+};
+
+document.getElementById('chooseEmail').onclick = () => {
+    document.getElementById('step0').style.display = 'none';
+    document.getElementById('emailStep1').style.display = 'block';
+};
 
 document.getElementById('copySecret').addEventListener('click', function() {
     const secretKey = document.getElementById('secretKey').textContent;
@@ -118,46 +146,137 @@ document.getElementById('copySecret').addEventListener('click', function() {
     }, 2000);
 });
 
-document.getElementById('verifyForm').addEventListener('submit', async function(e) {
+document.getElementById('startTotpSetup').onclick = async () => {
+    const res = await fetch('/auth/totp/setup', { method: 'POST', credentials: 'include' });
+    const data = await res.json();
+
+    document.getElementById('step1').style.display = 'none';
+    document.getElementById('step2').style.display = 'block';
+
+    const qr = qrcode(0, 'M');
+    qr.addData(data.qr_code_url);
+    qr.make();
+    document.getElementById('qrCode').innerHTML = qr.createImgTag(4,8);
+    document.getElementById('secretKey').textContent = data.secret;
+
+    const next = document.createElement('button');
+    next.textContent = "J'ai scanné le QR code";
+    next.className = "btn btn-primary";
+    next.style.marginTop = "20px";
+    next.onclick = () => {
+        document.getElementById('step2').style.display = 'none';
+        document.getElementById('step3').style.display = 'block';
+    };
+    document.getElementById('qrCodeContainer').appendChild(next);
+};
+
+document.getElementById('verifyTotpForm').onsubmit = async e => {
     e.preventDefault();
-    
-    const code = document.getElementById('verifyCode').value.trim().replace(/\s/g, '');
-    const messageDiv = document.getElementById('setupMessage');
-    
-    try {
-        const response = await fetch('/auth/totp/enable', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            body: JSON.stringify({ totp_code: code })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            document.getElementById('step3').style.display = 'none';
-            document.getElementById('step4').style.display = 'block';
-        } else {
-            messageDiv.className = 'message error';
-            messageDiv.textContent = data.error || 'Code TOTP invalide. Vérifiez que l\'heure de votre téléphone est correcte.';
-        }
-    } catch (error) {
-        messageDiv.className = 'message error';
-        messageDiv.textContent = 'Erreur lors de la vérification';
+    const code = document.getElementById('verifyTotp').value;
+
+    const res = await fetch('/auth/totp/enable', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({ totp_code: code })
+    });
+
+    if (res.ok) {
+        document.getElementById('step3').style.display = 'none';
+        document.getElementById('step4').style.display = 'block';
     }
-});
+};
 
-document.getElementById('cancelSetup').addEventListener('click', function() {
-    window.location.href = '/profile';
-});
 
-// Nettoyer l'input en temps réel
-document.getElementById('verifyCode').addEventListener('input', function(e) {
-    const value = e.target.value.replace(/[^0-9]/g, '');
-    e.target.value = value;
-});
+//
+// ---- SMS ----
+//
+
+// Étape 1 : envoyer SMS
+document.getElementById('smsPhoneForm').onsubmit = async e => {
+    e.preventDefault();
+    const phone = document.getElementById('smsPhone').value;
+
+    const res = await fetch('/auth/2fa/sms/start', { // endpoint que je te génère
+        method : 'POST',
+        headers : {'Content-Type':'application/json'},
+        credentials : 'include',
+        body : JSON.stringify({ phone })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+        window._challengeId = data.challenge_id;
+
+        document.getElementById('smsStep1').style.display = 'none';
+        document.getElementById('smsStep2').style.display = 'block';
+    }
+};
+
+// Étape 2 : vérifier le code SMS
+document.getElementById('smsVerifyForm').onsubmit = async e => {
+    e.preventDefault();
+    const code = document.getElementById('smsOtp').value;
+
+    const res = await fetch('/auth/2fa/sms/verify', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({
+            challenge_id: window._challengeId,
+            code
+        })
+    });
+
+    if (res.ok) {
+        document.getElementById('smsStep2').style.display = 'none';
+        document.getElementById('step4').style.display = 'block';
+    }
+};
+
+
+//
+// ---- Email ----
+//
+
+// Étape 1 : envoyer email
+document.getElementById('sendEmailOtp').onclick = async () => {
+    const res = await fetch('/auth/2fa/email/start', {
+        method:'POST',
+        credentials:'include'
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+        window._challengeId = data.challenge_id;
+
+        document.getElementById('emailStep1').style.display = 'none';
+        document.getElementById('emailStep2').style.display = 'block';
+    }
+};
+
+// Étape 2 : vérifier email OTP
+document.getElementById('emailVerifyForm').onsubmit = async e => {
+    e.preventDefault();
+    const code = document.getElementById('emailOtp').value;
+
+    const res = await fetch('/auth/2fa/email/verify', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body:JSON.stringify({
+            challenge_id: window._challengeId,
+            code
+        })
+    });
+
+    if (res.ok) {
+        document.getElementById('emailStep2').style.display = 'none';
+        document.getElementById('step4').style.display = 'block';
+    }
+};
 </script>
 
 <style>
